@@ -1,0 +1,2226 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>СУДОКУ — Великий Мастер</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ===== CSS ПЕРЕМЕННЫЕ ТЁМНОЙ/СВЕТЛОЙ ТЕМЫ ===== */
+  :root[data-theme="dark"] {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #111118;
+    --bg-card: #16161f;
+    --bg-hover: #1e1e2a;
+    --border: #2a2a3a;
+    --border-accent: #3d3d55;
+    --text-primary: #e8e8f0;
+    --text-secondary: #8888aa;
+    --text-muted: #555570;
+    --accent: #6c63ff;
+    --accent-glow: rgba(108, 99, 255, 0.3);
+    --accent-light: #8b85ff;
+    --error: #ff4757;
+    --error-bg: rgba(255, 71, 87, 0.15);
+    --success: #2ed573;
+    --success-bg: rgba(46, 213, 115, 0.15);
+    --warning: #ffa502;
+    --cell-given: #1e1e2e;
+    --cell-selected: rgba(108, 99, 255, 0.25);
+    --cell-peer: rgba(108, 99, 255, 0.08);
+    --cell-same: rgba(108, 99, 255, 0.18);
+    --cell-error: rgba(255, 71, 87, 0.2);
+    --number-given: #c8c8e8;
+    --number-user: #6c63ff;
+    --shadow: 0 8px 32px rgba(0,0,0,0.5);
+    --shadow-accent: 0 4px 24px rgba(108, 99, 255, 0.25);
+  }
+  :root[data-theme="light"] {
+    --bg-primary: #f0f0f8;
+    --bg-secondary: #e8e8f5;
+    --bg-card: #ffffff;
+    --bg-hover: #f5f5ff;
+    --border: #d8d8e8;
+    --border-accent: #b8b8d8;
+    --text-primary: #1a1a2e;
+    --text-secondary: #5555880;
+    --text-muted: #9999bb;
+    --accent: #5147e0;
+    --accent-glow: rgba(81, 71, 224, 0.2);
+    --accent-light: #7068f0;
+    --error: #e63950;
+    --error-bg: rgba(230, 57, 80, 0.1);
+    --success: #1ea855;
+    --success-bg: rgba(30, 168, 85, 0.1);
+    --warning: #e08c00;
+    --cell-given: #f8f8ff;
+    --cell-selected: rgba(81, 71, 224, 0.15);
+    --cell-peer: rgba(81, 71, 224, 0.05);
+    --cell-same: rgba(81, 71, 224, 0.12);
+    --cell-error: rgba(230, 57, 80, 0.12);
+    --number-given: #1a1a2e;
+    --number-user: #5147e0;
+    --shadow: 0 8px 32px rgba(0,0,0,0.12);
+    --shadow-accent: 0 4px 24px rgba(81, 71, 224, 0.18);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  /* ===== ФОНОВЫЙ УЗОР ===== */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 20% 20%, var(--accent-glow), transparent),
+      radial-gradient(ellipse 60% 60% at 80% 80%, rgba(46, 213, 115, 0.05), transparent);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ===== ИГРОВАЯ СЕТКА ===== */
+  #sudoku-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 0;
+    border: 2.5px solid var(--border-accent);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow), var(--shadow-accent);
+    background: var(--border);
+    width: min(480px, 92vw);
+    aspect-ratio: 1;
+    flex-shrink: 0;
+  }
+
+  .cell {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.12s, transform 0.08s;
+    user-select: none;
+    overflow: hidden;
+  }
+  .cell:hover:not(.cell-given) { background: var(--bg-hover); }
+  .cell.cell-selected { background: var(--cell-selected) !important; }
+  .cell.cell-peer { background: var(--cell-peer); }
+  .cell.cell-same-number { background: var(--cell-same); }
+  .cell.cell-error { background: var(--cell-error); }
+  .cell.cell-given { background: var(--cell-given); cursor: default; }
+
+  /* Жирные границы блоков 3×3 */
+  .cell:nth-child(3n) { border-right: 2px solid var(--border-accent); }
+  .cell:nth-child(9n) { border-right: none; }
+  .cell[data-row="2"] { border-bottom: 2px solid var(--border-accent); }
+  .cell[data-row="5"] { border-bottom: 2px solid var(--border-accent); }
+
+  .cell-number {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: clamp(14px, 3.5vw, 24px);
+    color: var(--number-given);
+    transition: transform 0.15s, color 0.15s;
+    line-height: 1;
+  }
+  .cell-number.user-input {
+    color: var(--number-user);
+  }
+  .cell-number.error-number {
+    color: var(--error);
+    animation: shakeCell 0.3s ease;
+  }
+
+  /* Режим заметок */
+  .cell-notes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    width: 100%;
+    height: 100%;
+    padding: 1px;
+  }
+  .note-digit {
+    font-family: 'Space Mono', monospace;
+    font-size: clamp(6px, 1.2vw, 9px);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  /* Анимация при вводе */
+  @keyframes popIn {
+    0% { transform: scale(0.5); opacity: 0; }
+    70% { transform: scale(1.15); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .animate-pop { animation: popIn 0.2s ease forwards; }
+
+  @keyframes shakeCell {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
+  /* ===== КНОПКИ ЦИФР ===== */
+  .digit-btn {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: clamp(16px, 3vw, 22px);
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .digit-btn:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); transform: translateY(-2px); }
+  .digit-btn:active { transform: scale(0.92); }
+  .digit-btn.digit-complete { opacity: 0.3; pointer-events: none; }
+  .digit-btn .digit-count {
+    position: absolute;
+    top: 2px; right: 4px;
+    font-size: 8px;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  /* ===== КНОПКИ УПРАВЛЕНИЯ ===== */
+  .ctrl-btn {
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    color: var(--text-secondary);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .ctrl-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-accent); }
+  .ctrl-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .ctrl-btn.hint-btn { border-color: var(--warning); color: var(--warning); }
+  .ctrl-btn.hint-btn:hover { background: rgba(255, 165, 2, 0.1); }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 6px 6px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    transition: all 0.18s;
+    flex: 1;
+    border: none;
+    background: none;
+  }
+  .sidebar-tab .tab-icon { font-size: 18px; line-height: 1; }
+  .sidebar-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .sidebar-tab.active { background: var(--accent); color: white; box-shadow: 0 2px 12px var(--accent-glow); }
+
+  /* ===== КАРТОЧКИ ===== */
+  .card {
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--border-accent); }
+
+  /* ===== КНОПКИ СЛОЖНОСТИ ===== */
+  .diff-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .diff-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .diff-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  /* ===== ПРОГРЕСС-БАР ===== */
+  .progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-light));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  /* ===== ШАПКА ===== */
+  header {
+    position: relative;
+    z-index: 10;
+    background: rgba(var(--bg-secondary), 0.8);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* ===== МОДАЛЬНЫЕ ОКНА ===== */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .modal-overlay.visible { opacity: 1; pointer-events: all; }
+  .modal-box {
+    background: var(--bg-card);
+    border: 1.5px solid var(--border-accent);
+    border-radius: 20px;
+    padding: 32px;
+    max-width: 480px;
+    width: 100%;
+    transform: translateY(20px);
+    transition: transform 0.2s;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  .modal-overlay.visible .modal-box { transform: translateY(0); }
+
+  /* ===== КОНФЕТТИ ===== */
+  .confetti-piece {
+    position: fixed;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    animation: confettiFall linear forwards;
+    pointer-events: none;
+    z-index: 1000;
+  }
+  @keyframes confettiFall {
+    0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+
+  /* ===== AI COACH ===== */
+  #ai-panel {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, opacity 0.3s;
+    opacity: 0;
+  }
+  #ai-panel.open { max-height: 500px; opacity: 1; }
+
+  .ai-message {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-primary);
+    margin-top: 10px;
+  }
+
+  /* ===== ДОСТИЖЕНИЯ ===== */
+  .achievement {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+  }
+  .achievement.unlocked { border-color: var(--success); background: var(--success-bg); }
+  .achievement-icon { font-size: 24px; flex-shrink: 0; }
+
+  /* ===== ТАЙМЕР ===== */
+  #timer-display {
+    font-family: 'Space Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+
+  /* ===== ЛИДЕРБОРД ===== */
+  .leaderboard-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+  .leaderboard-row:hover { background: var(--bg-hover); }
+  .rank-badge {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  /* ===== ПЕРЕКЛЮЧАТЕЛЬ ТЕМЫ ===== */
+  .theme-toggle {
+    width: 44px; height: 24px;
+    background: var(--border);
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: none;
+    flex-shrink: 0;
+  }
+  .theme-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    transition: transform 0.2s, background 0.2s;
+  }
+  [data-theme="light"] .theme-toggle::after { transform: translateX(20px); background: var(--accent); }
+  [data-theme="dark"] .theme-toggle { background: var(--bg-hover); }
+
+  /* ===== PRO КНОПКА ===== */
+  .pro-btn {
+    background: linear-gradient(135deg, #f9a825, #ff6d00);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .pro-btn:hover { transform: scale(1.05); box-shadow: 0 4px 16px rgba(255, 109, 0, 0.4); }
+
+  /* ===== ПАУЗА ОВЕРЛЕЙ ===== */
+  #pause-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    backdrop-filter: blur(8px);
+    display: none;
+  }
+  #pause-overlay.visible { display: flex; }
+
+  /* ===== COUNTDOWN ===== */
+  #daily-countdown {
+    font-family: 'Space Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+
+  /* ===== STREAK ===== */
+  .streak-flame {
+    animation: flamePulse 1.5s ease-in-out infinite;
+  }
+  @keyframes flamePulse {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+
+  /* ===== СКРОЛЛ ===== */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+  ::-webkit-scrollbar-thumb { background: var(--border-accent); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  /* ===== АНИМАЦИЯ ЗАГРУЗКИ AI ===== */
+  .ai-loading-dots span {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin: 0 2px;
+    animation: dotBounce 1.2s ease-in-out infinite;
+  }
+  .ai-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .ai-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dotBounce {
+    0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ===== ПОБЕДНЫЙ ЭКРАН ===== */
+  #win-modal .medal { font-size: 64px; animation: medalBounce 0.6s ease; }
+  @keyframes medalBounce {
+    0% { transform: scale(0) rotate(-15deg); }
+    60% { transform: scale(1.2) rotate(5deg); }
+    100% { transform: scale(1) rotate(0); }
+  }
+
+  /* ===== NUMBER PAD ===== */
+  #numpad {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 6px;
+    width: min(480px, 92vw);
+  }
+
+  /* ===== МОБИЛЬНЫЕ ВКЛАДКИ — убраны ===== */
+  @media (max-width: 768px) {
+    #sidebar { display: flex; flex-direction: column; width: 100%; position: static; max-height: none; }
+    #mobile-tabs { display: none !important; }
+  }
+  @media (min-width: 769px) {
+    #mobile-tabs { display: none; }
+  }
+
+  /* tab-content всегда видим теперь */
+  .tab-content { display: flex; flex-direction: column; gap: 12px; }
+  .tab-content.active { display: flex; }
+
+  /* ===== INPUT API KEY ===== */
+  .api-input {
+    background: var(--bg-secondary);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    padding: 8px 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .api-input:focus { border-color: var(--accent); }
+
+  /* Анимация для победной звезды */
+  .star-rotate { animation: starSpin 2s linear infinite; }
+  @keyframes starSpin {
+    0% { transform: rotate(0deg) scale(1); }
+    50% { transform: rotate(180deg) scale(1.2); }
+    100% { transform: rotate(360deg) scale(1); }
+  }
+
+  /* Highlight cells того же числа */
+  .cell.highlight-same {
+    background: var(--cell-same) !important;
+  }
+
+  /* ===== Gradient Text ===== */
+  .gradient-text {
+    background: linear-gradient(135deg, var(--accent), var(--accent-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== ШАПКА ===== -->
+<header class="px-4 py-3 flex items-center justify-between gap-3 sticky top-0">
+  <div class="flex items-center gap-3">
+    <!-- Логотип -->
+    <div class="flex items-center gap-2">
+      <div style="width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:white;flex-shrink:0;">S</div>
+      <span style="font-size:18px;font-weight:800;letter-spacing:-0.03em;" class="hidden sm:block">СУДОКУ<span class="gradient-text"> PRO</span></span>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-2 sm:gap-3">
+    <!-- Streak -->
+    <div class="flex items-center gap-1 px-3 py-1 rounded-full" style="background:var(--bg-card);border:1px solid var(--border);font-size:13px;">
+      <span class="streak-flame">🔥</span>
+      <span id="header-streak" style="font-weight:700;font-family:'Space Mono',monospace;">0</span>
+    </div>
+
+    <!-- Переключатель темы -->
+    <div class="flex items-center gap-2" title="Переключить тему">
+      <span style="font-size:14px;">☀️</span>
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()"></button>
+      <span style="font-size:14px;">🌙</span>
+    </div>
+
+    <!-- Кнопка Pro -->
+    <button class="pro-btn" onclick="openModal('pro-modal')">⭐ Pro</button>
+
+    <!-- Настройки -->
+    <button class="ctrl-btn" style="padding:8px;" onclick="openModal('settings-modal')" title="Настройки">
+      ⚙️
+    </button>
+  </div>
+</header>
+
+<!-- ===== ОСНОВНОЙ ЛЕЙАУТ ===== -->
+<div class="flex gap-4 p-4 max-w-7xl mx-auto relative z-1" style="min-height:calc(100vh - 64px);">
+
+  <!-- ===== SIDEBAR (десктоп) ===== -->
+  <aside id="sidebar" class="w-64 flex-shrink-0 flex flex-col gap-3" style="max-height:calc(100vh - 80px);overflow-y:auto;position:sticky;top:72px;">
+
+    <!-- ===== SIDEBAR БЕЗ ВКЛАДОК — всё сразу ===== -->
+
+    <!-- Сложность -->
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:10px;">Уровень сложности</div>
+      <div class="flex flex-wrap gap-2">
+        <button class="diff-btn" onclick="setDifficulty('easy', this)">Лёгкий</button>
+        <button class="diff-btn" onclick="setDifficulty('medium', this)">Средний</button>
+        <button class="diff-btn active" onclick="setDifficulty('hard', this)">Сложный</button>
+        <button class="diff-btn" onclick="setDifficulty('expert', this)">Эксперт</button>
+      </div>
+    </div>
+
+    <!-- Новая игра -->
+    <button onclick="newGame()" class="w-full py-3 rounded-xl font-bold text-white transition-all hover:opacity-90 active:scale-95" style="background:linear-gradient(135deg,var(--accent),var(--accent-light));font-size:14px;border:none;cursor:pointer;letter-spacing:0.02em;">
+      ▶ Новая игра
+    </button>
+
+    <!-- Прогресс -->
+    <div class="card">
+      <div class="flex justify-between items-center mb-2">
+        <span style="font-size:12px;color:var(--text-muted);">Прогресс</span>
+        <span id="progress-text" style="font-size:12px;font-weight:700;font-family:'Space Mono',monospace;">0/81</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <div class="flex justify-between mt-2">
+        <span style="font-size:11px;color:var(--text-muted);">Ошибок: <span id="error-count" style="color:var(--error);">0</span></span>
+        <span style="font-size:11px;color:var(--text-muted);">Подсказок: <span id="hint-count" style="color:var(--warning);">3</span></span>
+      </div>
+    </div>
+
+    <!-- Daily Challenge -->
+    <div class="card" style="text-align:center;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px;">📅 Задание дня</div>
+      <div id="daily-date" style="font-size:16px;font-weight:800;margin-bottom:4px;"></div>
+      <div id="daily-status" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Не начато</div>
+      <button onclick="startDailyChallenge()" class="w-full py-2 rounded-lg font-bold text-white transition-all hover:opacity-90" style="background:var(--accent);border:none;cursor:pointer;font-size:13px;">
+        Начать Daily
+      </button>
+    </div>
+
+    <!-- Серия + обратный отсчёт -->
+    <div class="card" style="text-align:center;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px;">⏰ Следующее через</div>
+      <div id="daily-countdown">--:--:--</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px;">🔥 Серия</div>
+      <div class="flex items-center gap-2">
+        <span style="font-size:36px;" class="streak-flame">🔥</span>
+        <div>
+          <div id="streak-display" style="font-size:28px;font-weight:800;font-family:'Space Mono',monospace;color:var(--accent);">0</div>
+          <div style="font-size:11px;color:var(--text-muted);">дней подряд</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Статистика -->
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:12px;">📊 Статистика</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div style="text-align:center;padding:10px;background:var(--bg-secondary);border-radius:10px;">
+          <div id="stat-played" style="font-size:24px;font-weight:800;font-family:'Space Mono',monospace;color:var(--accent);">0</div>
+          <div style="font-size:10px;color:var(--text-muted);">Сыграно</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--bg-secondary);border-radius:10px;">
+          <div id="stat-won" style="font-size:24px;font-weight:800;font-family:'Space Mono',monospace;color:var(--success);">0</div>
+          <div style="font-size:10px;color:var(--text-muted);">Победы</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--bg-secondary);border-radius:10px;">
+          <div id="stat-streak" style="font-size:24px;font-weight:800;font-family:'Space Mono',monospace;color:var(--warning);">0</div>
+          <div style="font-size:10px;color:var(--text-muted);">Серия</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--bg-secondary);border-radius:10px;">
+          <div id="stat-winrate" style="font-size:24px;font-weight:800;font-family:'Space Mono',monospace;color:var(--accent-light);">0%</div>
+          <div style="font-size:10px;color:var(--text-muted);">Победы %</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:10px;">⏱ Лучшее время</div>
+      <div id="best-times-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
+    <!-- Достижения -->
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);padding:4px;margin-bottom:4px;">🏆 Достижения</div>
+      <div id="achievements-list" class="flex flex-col gap-2"></div>
+    </div>
+
+    <!-- Лидерборд -->
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:10px;">👑 Топ-10</div>
+      <div id="global-leaderboard" class="flex flex-col"></div>
+    </div>
+
+    <!-- Рекорды дня -->
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px;">🏆 Рекорды дня</div>
+      <div id="daily-leaderboard" style="font-size:13px;"></div>
+    </div>
+
+    <input type="hidden" id="api-key-sidebar" value="builtin">
+  </aside>
+
+  <!-- ===== ЦЕНТР: ИГРОВОЕ ПОЛЕ ===== -->
+  <main class="flex-1 flex flex-col items-center gap-4">
+
+    <!-- Мобильный вид — контент сайдбара скрыт, всё в aside -->
+
+    <!-- ===== ИНФОРМАЦИЯ ОБ ИГРЕ (выше поля) ===== -->
+    <div class="flex items-center gap-4 w-full justify-center flex-wrap">
+      <div class="flex items-center gap-2 px-3 py-2 rounded-xl" style="background:var(--bg-card);border:1px solid var(--border);">
+        <span style="font-size:13px;color:var(--text-muted);">Уровень:</span>
+        <span id="current-difficulty-label" style="font-size:13px;font-weight:700;color:var(--accent);">Сложный</span>
+      </div>
+      <div id="timer-display">00:00</div>
+      <button onclick="togglePause()" class="ctrl-btn" id="pause-btn">⏸ Пауза</button>
+    </div>
+
+    <!-- ===== СУДОКУ ПОЛЕ ===== -->
+    <div style="position:relative;">
+      <div id="sudoku-grid"></div>
+      <!-- Оверлей паузы -->
+      <div id="pause-overlay">
+        <div style="font-size:48px;margin-bottom:16px;">⏸</div>
+        <div style="font-size:20px;font-weight:800;margin-bottom:8px;">Пауза</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;">Нажмите для продолжения</div>
+        <button onclick="togglePause()" class="ctrl-btn" style="background:var(--accent);color:white;border-color:var(--accent);">▶ Продолжить</button>
+      </div>
+    </div>
+
+    <!-- ===== NUMPAD ===== -->
+    <div id="numpad">
+      <!-- Цифры 1-9 генерируются JS -->
+    </div>
+
+    <!-- ===== КНОПКИ УПРАВЛЕНИЯ ===== -->
+    <div class="flex flex-wrap gap-2 justify-center">
+      <button onclick="togglePencil()" class="ctrl-btn" id="pencil-btn" title="Режим заметок">✏️ Заметки</button>
+      <button onclick="undoAction()" class="ctrl-btn" title="Отменить действие">↩ Отмена</button>
+      <button onclick="useHint()" class="ctrl-btn hint-btn" id="hint-btn" title="Подсказка (3 осталось)">💡 Подсказка <span id="hint-remaining">(3)</span></button>
+      <button onclick="eraseCell()" class="ctrl-btn" title="Стереть ячейку">🗑 Стереть</button>
+    </div>
+
+    <!-- ===== AI COACH ПАНЕЛЬ ===== -->
+    <div class="w-full" style="max-width:480px;">
+      <button onclick="toggleAIPanel()" class="ctrl-btn w-full justify-center" id="ai-toggle-btn" style="background:linear-gradient(135deg,rgba(108,99,255,0.15),rgba(108,99,255,0.05));border-color:var(--accent);">
+        🤖 Спросить AI Coach
+      </button>
+      <div id="ai-panel" class="mt-2">
+        <div class="card" style="padding:12px;">
+          <div class="flex items-center justify-between mb-3">
+            <span style="font-size:13px;font-weight:700;color:var(--accent);">🤖 AI Coach — Стратегический советник</span>
+            <button onclick="askAI()" class="ctrl-btn" style="padding:6px 12px;font-size:12px;background:var(--accent);color:white;border-color:var(--accent);">
+              Анализировать
+            </button>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+            Выбери ячейку и нажми "Анализировать" — AI объяснит стратегию решения
+          </div>
+          <div id="ai-response">
+            <div class="ai-message" style="color:var(--text-muted);">
+              ← Выберите ячейку на поле, затем нажмите "Анализировать". AI Coach объяснит, какие числа возможны и какую технику применить (naked singles, hidden singles, и т.д.)
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ===== МОДАЛЬНОЕ ОКНО: ПОБЕДА ===== -->
+<div id="win-modal" class="modal-overlay" onclick="closeModalOnOverlay(event,'win-modal')">
+  <div class="modal-box" style="text-align:center;">
+    <div class="medal">🏅</div>
+    <div style="font-size:28px;font-weight:800;margin:12px 0 4px;">Судоку решено!</div>
+    <div id="win-time" style="font-size:40px;font-family:'Space Mono',monospace;color:var(--accent);font-weight:700;margin-bottom:8px;"></div>
+    <div id="win-difficulty" style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;"></div>
+    <div id="win-achievements" class="flex flex-wrap gap-2 justify-center mb-4"></div>
+    <div class="flex gap-3 justify-center flex-wrap">
+      <button onclick="newGame();closeModal('win-modal')" class="ctrl-btn" style="background:var(--accent);color:white;border-color:var(--accent);">▶ Новая игра</button>
+      <button onclick="closeModal('win-modal')" class="ctrl-btn">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== МОДАЛЬНОЕ ОКНО: PRO ===== -->
+<div id="pro-modal" class="modal-overlay" onclick="closeModalOnOverlay(event,'pro-modal')">
+  <div class="modal-box">
+    <button onclick="closeModal('pro-modal')" style="position:absolute;top:16px;right:16px;background:none;border:none;cursor:pointer;font-size:20px;color:var(--text-muted);">✕</button>
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="font-size:48px;margin-bottom:8px;" class="star-rotate">⭐</div>
+      <div style="font-size:24px;font-weight:800;">СУДОКУ PRO</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Разблокируй все возможности</div>
+    </div>
+
+    <div class="flex flex-col gap-3 mb-6">
+      <div class="flex items-center gap-3 p-3 rounded-xl" style="background:var(--bg-secondary);border:1px solid var(--border);">
+        <span style="font-size:24px;">💡</span>
+        <div>
+          <div style="font-weight:700;font-size:14px;">Безлимитные подсказки</div>
+          <div style="font-size:12px;color:var(--text-muted);">Никаких ограничений — подсказка всегда под рукой</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 p-3 rounded-xl" style="background:var(--bg-secondary);border:1px solid var(--border);">
+        <span style="font-size:24px;">🎨</span>
+        <div>
+          <div style="font-weight:700;font-size:14px;">Кастомные темы</div>
+          <div style="font-size:12px;color:var(--text-muted);">10+ уникальных тем оформления (Neon, Ocean, Forest...)</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 p-3 rounded-xl" style="background:var(--bg-secondary);border:1px solid var(--border);">
+        <span style="font-size:24px;">🤖</span>
+        <div>
+          <div style="font-weight:700;font-size:14px;">AI Coach без лимитов</div>
+          <div style="font-size:12px;color:var(--text-muted);">Неограниченные запросы к AI Coach</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 p-3 rounded-xl" style="background:var(--bg-secondary);border:1px solid var(--border);">
+        <span style="font-size:24px;">🚫</span>
+        <div>
+          <div style="font-weight:700;font-size:14px;">Без рекламы</div>
+          <div style="font-size:12px;color:var(--text-muted);">Чистый интерфейс без отвлечений</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 p-3 rounded-xl" style="background:var(--bg-secondary);border:1px solid var(--border);">
+        <span style="font-size:24px;">📊</span>
+        <div>
+          <div style="font-weight:700;font-size:14px;">Расширенная статистика</div>
+          <div style="font-size:12px;color:var(--text-muted);">Детальный анализ ваших игр и прогресс</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;">
+      <div style="font-size:32px;font-weight:800;margin-bottom:4px;">990₸ <span style="font-size:14px;font-weight:400;color:var(--text-muted);">/ месяц</span></div>
+      <div style="font-size:12px;color:var(--success);margin-bottom:16px;">Или 6 990₸ / год (экономия 41%)</div>
+      <button onclick="alert('Платёжная система в разработке! Спасибо за интерес 🚀')" class="pro-btn w-full py-3 rounded-xl text-base">
+        ⭐ Оформить подписку
+      </button>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">7 дней бесплатного пробного периода</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== МОДАЛЬНОЕ ОКНО: НАСТРОЙКИ ===== -->
+<div id="settings-modal" class="modal-overlay" onclick="closeModalOnOverlay(event,'settings-modal')">
+  <div class="modal-box">
+    <button onclick="closeModal('settings-modal')" style="position:absolute;top:16px;right:16px;background:none;border:none;cursor:pointer;font-size:20px;color:var(--text-muted);">✕</button>
+    <div style="font-size:20px;font-weight:800;margin-bottom:20px;">⚙️ Настройки</div>
+
+    <div class="flex flex-col gap-4">
+      <div>
+        <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);display:block;margin-bottom:8px;">🤖 AI Coach</label>
+        <input type="hidden" id="api-key-settings" value="builtin">
+        <div style="font-size:13px;color:var(--success);padding:10px;background:var(--success-bg);border-radius:8px;">
+          ✅ Встроенный AI Coach активен — работает без API ключа!
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);display:block;margin-bottom:8px;">👤 Имя игрока</label>
+        <input type="text" class="api-input" id="player-name-input" placeholder="Введите ваше имя">
+      </div>
+
+      <div class="flex items-center justify-between">
+        <span style="font-size:14px;font-weight:600;">Звуковые эффекты</span>
+        <div style="font-size:12px;color:var(--text-muted);">Скоро</div>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <span style="font-size:14px;font-weight:600;">Автосохранение</span>
+        <div style="width:40px;height:22px;background:var(--accent);border-radius:11px;position:relative;">
+          <div style="position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:50%;background:white;"></div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-2">
+        <button onclick="saveSettings()" class="ctrl-btn flex-1 justify-center" style="background:var(--accent);color:white;border-color:var(--accent);">Сохранить</button>
+        <button onclick="clearAllData()" class="ctrl-btn" style="color:var(--error);border-color:var(--error);">🗑 Сбросить всё</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== МОДАЛЬНОЕ ОКНО: ДОСТИЖЕНИЕ ===== -->
+<div id="achievement-toast" style="position:fixed;bottom:24px;right:24px;z-index:200;transform:translateX(200px);transition:transform 0.4s ease;pointer-events:none;">
+  <div class="card" style="border-color:var(--success);background:var(--success-bg);padding:14px 18px;display:flex;align-items:center;gap:12px;min-width:240px;">
+    <span id="toast-icon" style="font-size:28px;">🏆</span>
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--success);letter-spacing:0.1em;">Достижение!</div>
+      <div id="toast-title" style="font-size:14px;font-weight:700;margin-top:2px;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// ИГРОВОЕ СОСТОЯНИЕ
+// ============================================================
+const state = {
+  board: Array(81).fill(0),         // текущая доска (0 = пусто)
+  solution: Array(81).fill(0),       // правильное решение
+  given: Array(81).fill(false),      // данные числа (нельзя менять)
+  notes: Array(81).fill(null).map(() => new Set()), // заметки
+  selected: -1,                      // индекс выбранной ячейки
+  difficulty: 'hard',                // текущий уровень
+  pencilMode: false,                 // режим карандаша
+  hintsLeft: 3,                      // оставшиеся подсказки
+  errors: 0,                         // количество ошибок
+  history: [],                       // история ходов для undo
+  timer: 0,                          // секунды
+  timerInterval: null,               // интервал таймера
+  paused: false,                     // на паузе
+  isDaily: false,                    // ежедневный вызов
+  gameOver: false,                   // игра закончена
+  noErrors: true,                    // флаг "без ошибок"
+  aiPanelOpen: false,                // AI панель открыта
+};
+
+// Конфигурация сложности: количество убираемых ячеек
+const DIFFICULTY_CONFIG = {
+  easy:   { clues: 50, label: 'Лёгкий' },
+  medium: { clues: 36, label: 'Средний' },
+  hard:   { clues: 28, label: 'Сложный' },
+  expert: { clues: 22, label: 'Эксперт' },
+};
+
+// ============================================================
+// ИНИЦИАЛИЗАЦИЯ
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  buildNumpad();
+  buildAchievementsList();
+  renderStats();
+  renderLeaderboard();
+  renderDailyLeaderboard();
+  updateStreak();
+  updateDailyCountdown();
+  setInterval(updateDailyCountdown, 1000);
+  newGame();
+});
+
+// ============================================================
+// ГЕНЕРАТОР СУДОКУ
+// ============================================================
+
+/** Проверяет, можно ли поставить num в позицию idx */
+function isValid(board, idx, num) {
+  const row = Math.floor(idx / 9);
+  const col = idx % 9;
+  const boxRow = Math.floor(row / 3) * 3;
+  const boxCol = Math.floor(col / 3) * 3;
+
+  for (let i = 0; i < 9; i++) {
+    if (board[row * 9 + i] === num) return false;
+    if (board[i * 9 + col] === num) return false;
+    if (board[(boxRow + Math.floor(i / 3)) * 9 + (boxCol + i % 3)] === num) return false;
+  }
+  return true;
+}
+
+/** Заполняет доску с помощью backtracking */
+function solveSudoku(board) {
+  const empty = board.indexOf(0);
+  if (empty === -1) return true;
+
+  const nums = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  for (const num of nums) {
+    if (isValid(board, empty, num)) {
+      board[empty] = num;
+      if (solveSudoku(board)) return true;
+      board[empty] = 0;
+    }
+  }
+  return false;
+}
+
+/** Тасует массив (Fisher-Yates) */
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Seeded random (для daily challenge) */
+function seededRandom(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
+/** Shuffle с seed */
+function seededShuffle(arr, rng) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Генерирует новую головоломку */
+function generatePuzzle(difficulty = 'hard', seedVal = null) {
+  // 1. Создаём пустую доску и решаем её
+  const solution = Array(81).fill(0);
+
+  // Заполняем первую строку случайно
+  const firstRow = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  if (seedVal) {
+    const rng = seededRandom(seedVal);
+    firstRow.splice(0, 9, ...seededShuffle([1,2,3,4,5,6,7,8,9], rng));
+  }
+  for (let i = 0; i < 9; i++) solution[i] = firstRow[i];
+
+  solveSudoku(solution);
+
+  // 2. Убираем числа согласно сложности
+  const puzzle = [...solution];
+  const { clues } = DIFFICULTY_CONFIG[difficulty];
+  const toRemove = 81 - clues;
+
+  const positions = shuffle([...Array(81).keys()]);
+  if (seedVal) {
+    const rng = seededRandom(seedVal + 1);
+    positions.splice(0, 81, ...seededShuffle([...Array(81).keys()], rng));
+  }
+
+  let removed = 0;
+  for (const pos of positions) {
+    if (removed >= toRemove) break;
+    const backup = puzzle[pos];
+    puzzle[pos] = 0;
+
+    // Проверяем уникальность решения (упрощённо)
+    if (!hasUniqueSolution(puzzle)) {
+      puzzle[pos] = backup;
+    } else {
+      removed++;
+    }
+  }
+
+  return { puzzle, solution };
+}
+
+/** Упрощённая проверка уникальности (быстрая) */
+function hasUniqueSolution(board) {
+  let count = 0;
+  function solve(b) {
+    if (count > 1) return;
+    const empty = b.indexOf(0);
+    if (empty === -1) { count++; return; }
+    for (let num = 1; num <= 9; num++) {
+      if (isValid(b, empty, num)) {
+        b[empty] = num;
+        solve(b);
+        b[empty] = 0;
+      }
+    }
+  }
+  solve([...board]);
+  return count === 1;
+}
+
+// ============================================================
+// УПРАВЛЕНИЕ ИГРОЙ
+// ============================================================
+
+/** Начинает новую игру */
+function newGame(puzzleData = null, isDaily = false) {
+  stopTimer();
+
+  // Сбрасываем состояние
+  state.selected = -1;
+  state.pencilMode = false;
+  state.hintsLeft = 3;
+  state.errors = 0;
+  state.history = [];
+  state.paused = false;
+  state.isDaily = isDaily;
+  state.gameOver = false;
+  state.noErrors = true;
+  state.notes = Array(81).fill(null).map(() => new Set());
+
+  // Убираем паузу
+  document.getElementById('pause-overlay').classList.remove('visible');
+  document.getElementById('pause-btn').textContent = '⏸ Пауза';
+
+  // Генерируем или используем готовую головоломку
+  if (puzzleData) {
+    state.board = [...puzzleData.puzzle];
+    state.solution = [...puzzleData.solution];
+  } else {
+    const { puzzle, solution } = generatePuzzle(state.difficulty);
+    state.board = [...puzzle];
+    state.solution = [...solution];
+  }
+
+  // Помечаем данные числа
+  state.given = state.board.map(v => v !== 0);
+
+  // Обновляем UI
+  updateHintUI();
+  updatePencilUI();
+  document.getElementById('pencil-btn').classList.remove('active');
+  document.getElementById('current-difficulty-label').textContent = DIFFICULTY_CONFIG[state.difficulty].label;
+
+  // Увеличиваем счётчик сыгранных
+  if (!isDaily) updateStatsPlayed();
+
+  renderBoard();
+  startTimer();
+  updateProgress();
+  updateNumpadCounts();
+}
+
+/** Начинает ежедневный вызов */
+function startDailyChallenge() {
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}${today.getMonth()}${today.getDate()}`;
+  const seed = parseInt(dateStr);
+
+  // Проверяем, играли ли сегодня
+  const playedToday = localStorage.getItem('sudoku_daily_played') === dateStr;
+  if (playedToday) {
+    alert('Сегодняшнее задание уже завершено! Возвращайтесь завтра 🌟');
+    return;
+  }
+
+  const dailyDiff = 'hard';
+  state.difficulty = dailyDiff;
+  const puzzleData = generatePuzzle(dailyDiff, seed);
+
+  document.getElementById('daily-status').textContent = 'В процессе...';
+  newGame(puzzleData, true);
+  updateStatsPlayed(true);
+}
+
+// ============================================================
+// РЕНДЕРИНГ ДОСКИ
+// ============================================================
+
+/** Рендерит всю доску */
+function renderBoard() {
+  const grid = document.getElementById('sudoku-grid');
+  grid.innerHTML = '';
+
+  for (let i = 0; i < 81; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.idx = i;
+    cell.dataset.row = Math.floor(i / 9);
+    cell.dataset.col = i % 9;
+
+    if (state.given[i]) cell.classList.add('cell-given');
+
+    cell.addEventListener('click', () => selectCell(i));
+    cell.addEventListener('touchend', (e) => { e.preventDefault(); selectCell(i); });
+
+    grid.appendChild(cell);
+    updateCellDisplay(i);
+  }
+}
+
+/** Обновляет отображение одной ячейки */
+function updateCellDisplay(idx) {
+  const cell = document.querySelector(`.cell[data-idx="${idx}"]`);
+  if (!cell) return;
+
+  // Очищаем содержимое
+  cell.innerHTML = '';
+
+  const val = state.board[idx];
+  const hasNotes = state.notes[idx].size > 0;
+
+  if (val !== 0) {
+    // Показываем число
+    const span = document.createElement('span');
+    span.className = 'cell-number';
+    if (!state.given[idx]) span.classList.add('user-input');
+
+    // Проверяем ошибку
+    if (!state.given[idx] && val !== state.solution[idx]) {
+      span.classList.add('error-number');
+      cell.classList.add('cell-error');
+    } else {
+      cell.classList.remove('cell-error');
+    }
+
+    span.textContent = val;
+    cell.appendChild(span);
+  } else if (hasNotes) {
+    // Показываем заметки
+    const notesGrid = document.createElement('div');
+    notesGrid.className = 'cell-notes';
+    for (let n = 1; n <= 9; n++) {
+      const noteSpan = document.createElement('span');
+      noteSpan.className = 'note-digit';
+      noteSpan.textContent = state.notes[idx].has(n) ? n : '';
+      notesGrid.appendChild(noteSpan);
+    }
+    cell.appendChild(notesGrid);
+  }
+}
+
+/** Выбирает ячейку */
+function selectCell(idx) {
+  if (state.paused || state.gameOver) return;
+
+  state.selected = idx;
+  updateHighlights();
+}
+
+/** Обновляет подсветку ячеек */
+function updateHighlights() {
+  const cells = document.querySelectorAll('.cell');
+  const sel = state.selected;
+
+  cells.forEach(cell => {
+    cell.classList.remove('cell-selected', 'cell-peer', 'cell-same-number');
+  });
+
+  if (sel === -1) return;
+
+  const selRow = Math.floor(sel / 9);
+  const selCol = sel % 9;
+  const selBox = Math.floor(selRow / 3) * 3 + Math.floor(selCol / 3);
+  const selVal = state.board[sel];
+
+  cells.forEach(cell => {
+    const idx = parseInt(cell.dataset.idx);
+    const row = Math.floor(idx / 9);
+    const col = idx % 9;
+    const box = Math.floor(row / 3) * 3 + Math.floor(col / 3);
+
+    if (idx === sel) {
+      cell.classList.add('cell-selected');
+    } else if (row === selRow || col === selCol || box === selBox) {
+      cell.classList.add('cell-peer');
+    }
+
+    // Подсвечиваем те же числа
+    if (selVal !== 0 && state.board[idx] === selVal) {
+      cell.classList.add('cell-same-number');
+    }
+  });
+}
+
+// ============================================================
+// ВВОД ЧИСЕЛ
+// ============================================================
+
+/** Обрабатывает ввод числа */
+function inputNumber(num) {
+  const idx = state.selected;
+  if (idx === -1 || state.given[idx] || state.paused || state.gameOver) return;
+
+  if (state.pencilMode) {
+    // Режим заметок
+    saveToHistory(idx);
+    if (state.notes[idx].has(num)) {
+      state.notes[idx].delete(num);
+    } else {
+      state.notes[idx].add(num);
+      state.board[idx] = 0; // Очищаем число при добавлении заметки
+    }
+    updateCellDisplay(idx);
+    return;
+  }
+
+  // Сохраняем в историю
+  saveToHistory(idx);
+
+  // Обычный режим
+  state.board[idx] = num;
+  state.notes[idx].clear(); // Очищаем заметки при вводе числа
+
+  // Анимация
+  const cell = document.querySelector(`.cell[data-idx="${idx}"]`);
+  updateCellDisplay(idx);
+  const numEl = cell.querySelector('.cell-number');
+  if (numEl) numEl.classList.add('animate-pop');
+
+  // Проверяем ошибку
+  if (num !== state.solution[idx]) {
+    state.errors++;
+    state.noErrors = false;
+    document.getElementById('error-count').textContent = state.errors;
+  } else {
+    // Убираем заметки в peers
+    clearPeerNotes(idx, num);
+  }
+
+  updateHighlights();
+  updateProgress();
+  updateNumpadCounts();
+  checkWin();
+}
+
+/** Очищает заметки числа в связанных ячейках */
+function clearPeerNotes(idx, num) {
+  const row = Math.floor(idx / 9);
+  const col = idx % 9;
+  const boxRow = Math.floor(row / 3) * 3;
+  const boxCol = Math.floor(col / 3) * 3;
+
+  for (let i = 0; i < 9; i++) {
+    [row * 9 + i, i * 9 + col, (boxRow + Math.floor(i/3)) * 9 + (boxCol + i%3)].forEach(peerIdx => {
+      if (state.notes[peerIdx].has(num)) {
+        state.notes[peerIdx].delete(num);
+        updateCellDisplay(peerIdx);
+      }
+    });
+  }
+}
+
+/** Стирает содержимое ячейки */
+function eraseCell() {
+  const idx = state.selected;
+  if (idx === -1 || state.given[idx] || state.paused || state.gameOver) return;
+
+  saveToHistory(idx);
+  state.board[idx] = 0;
+  state.notes[idx].clear();
+  updateCellDisplay(idx);
+  updateHighlights();
+  updateProgress();
+  updateNumpadCounts();
+}
+
+/** Клавиатурный ввод */
+document.addEventListener('keydown', (e) => {
+  if (state.selected === -1) return;
+
+  const key = e.key;
+  if (key >= '1' && key <= '9') {
+    inputNumber(parseInt(key));
+  } else if (key === 'Backspace' || key === 'Delete' || key === '0') {
+    eraseCell();
+  } else if (key === 'ArrowUp') {
+    e.preventDefault();
+    const newIdx = state.selected - 9;
+    if (newIdx >= 0) selectCell(newIdx);
+  } else if (key === 'ArrowDown') {
+    e.preventDefault();
+    const newIdx = state.selected + 9;
+    if (newIdx < 81) selectCell(newIdx);
+  } else if (key === 'ArrowLeft') {
+    e.preventDefault();
+    const newIdx = state.selected - 1;
+    if (newIdx >= 0) selectCell(newIdx);
+  } else if (key === 'ArrowRight') {
+    e.preventDefault();
+    const newIdx = state.selected + 1;
+    if (newIdx < 81) selectCell(newIdx);
+  } else if (key === 'z' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    undoAction();
+  } else if (key === 'p') {
+    togglePencil();
+  }
+});
+
+// ============================================================
+// ИСТОРИЯ ХОДОВ (UNDO)
+// ============================================================
+
+function saveToHistory(idx) {
+  state.history.push({
+    idx,
+    value: state.board[idx],
+    notes: new Set(state.notes[idx]),
+    errors: state.errors,
+    noErrors: state.noErrors,
+  });
+  // Ограничиваем историю 50 ходами
+  if (state.history.length > 50) state.history.shift();
+}
+
+function undoAction() {
+  if (state.history.length === 0) return;
+  const last = state.history.pop();
+  state.board[last.idx] = last.value;
+  state.notes[last.idx] = new Set(last.notes);
+  state.errors = last.errors;
+  state.noErrors = last.noErrors;
+  document.getElementById('error-count').textContent = state.errors;
+  updateCellDisplay(last.idx);
+  updateHighlights();
+  updateProgress();
+  updateNumpadCounts();
+}
+
+// ============================================================
+// ПОДСКАЗКИ
+// ============================================================
+
+function useHint() {
+  if (state.hintsLeft <= 0) {
+    alert('Подсказки закончились! Попробуйте Pro для безлимитных подсказок ⭐');
+    return;
+  }
+  if (state.selected === -1 || state.gameOver || state.paused) {
+    // Находим ошибочную или пустую ячейку
+    let hintIdx = -1;
+    for (let i = 0; i < 81; i++) {
+      if (!state.given[i] && (state.board[i] === 0 || state.board[i] !== state.solution[i])) {
+        hintIdx = i;
+        break;
+      }
+    }
+    if (hintIdx === -1) return;
+    state.selected = hintIdx;
+  }
+
+  const idx = state.selected;
+  if (state.given[idx]) return;
+
+  saveToHistory(idx);
+  state.board[idx] = state.solution[idx];
+  state.notes[idx].clear();
+  state.given[idx] = true; // Помечаем как данное (нельзя стирать)
+
+  const cell = document.querySelector(`.cell[data-idx="${idx}"]`);
+  cell.classList.add('cell-given');
+  updateCellDisplay(idx);
+
+  const numEl = cell.querySelector('.cell-number');
+  if (numEl) numEl.classList.add('animate-pop');
+
+  state.hintsLeft--;
+  updateHintUI();
+  updateHighlights();
+  updateProgress();
+  updateNumpadCounts();
+  checkWin();
+}
+
+function updateHintUI() {
+  document.getElementById('hint-count').textContent = state.hintsLeft;
+  document.getElementById('hint-remaining').textContent = `(${state.hintsLeft})`;
+  const btn = document.getElementById('hint-btn');
+  if (state.hintsLeft === 0) {
+    btn.style.opacity = '0.5';
+    btn.title = 'Подсказки закончились';
+  } else {
+    btn.style.opacity = '1';
+  }
+}
+
+// ============================================================
+// КАРАНДАШНЫЙ РЕЖИМ
+// ============================================================
+
+function togglePencil() {
+  state.pencilMode = !state.pencilMode;
+  updatePencilUI();
+}
+
+function updatePencilUI() {
+  const btn = document.getElementById('pencil-btn');
+  if (state.pencilMode) {
+    btn.classList.add('active');
+    btn.innerHTML = '✏️ Заметки <span style="font-size:9px;background:white;color:var(--accent);padding:1px 4px;border-radius:4px;margin-left:2px;">ВКЛ</span>';
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML = '✏️ Заметки';
+  }
+}
+
+// ============================================================
+// ТАЙМЕР
+// ============================================================
+
+function startTimer() {
+  state.timer = 0;
+  updateTimerDisplay();
+  state.timerInterval = setInterval(() => {
+    if (!state.paused && !state.gameOver) {
+      state.timer++;
+      updateTimerDisplay();
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(state.timerInterval);
+  state.timerInterval = null;
+}
+
+function updateTimerDisplay() {
+  const m = Math.floor(state.timer / 60).toString().padStart(2, '0');
+  const s = (state.timer % 60).toString().padStart(2, '0');
+  document.getElementById('timer-display').textContent = `${m}:${s}`;
+}
+
+function togglePause() {
+  if (state.gameOver) return;
+  state.paused = !state.paused;
+  const overlay = document.getElementById('pause-overlay');
+  const btn = document.getElementById('pause-btn');
+  overlay.classList.toggle('visible', state.paused);
+  btn.textContent = state.paused ? '▶ Продолжить' : '⏸ Пауза';
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// ============================================================
+// ПРОГРЕСС
+// ============================================================
+
+function updateProgress() {
+  const filled = state.board.filter((v, i) => v !== 0).length;
+  const total = 81;
+  const pct = Math.round((filled / total) * 100);
+
+  document.getElementById('progress-text').textContent = `${filled}/${total}`;
+  document.getElementById('progress-fill').style.width = `${pct}%`;
+}
+
+// ============================================================
+// СЧЁТЧИКИ ЦИФР (numpad)
+// ============================================================
+
+function buildNumpad() {
+  const numpad = document.getElementById('numpad');
+  numpad.innerHTML = '';
+  for (let n = 1; n <= 9; n++) {
+    const btn = document.createElement('button');
+    btn.className = 'digit-btn';
+    btn.dataset.digit = n;
+    btn.innerHTML = `${n}<span class="digit-count" id="count-${n}"></span>`;
+    btn.addEventListener('click', () => inputNumber(n));
+    numpad.appendChild(btn);
+  }
+}
+
+function updateNumpadCounts() {
+  for (let n = 1; n <= 9; n++) {
+    const count = state.board.filter(v => v === n).length;
+    const el = document.getElementById(`count-${n}`);
+    const btn = document.querySelector(`.digit-btn[data-digit="${n}"]`);
+    if (el) el.textContent = count > 0 ? `${count}/9` : '';
+    if (btn) btn.classList.toggle('digit-complete', count >= 9);
+  }
+}
+
+// ============================================================
+// ПРОВЕРКА ПОБЕДЫ
+// ============================================================
+
+function checkWin() {
+  // Проверяем, что все ячейки заполнены верно
+  for (let i = 0; i < 81; i++) {
+    if (state.board[i] !== state.solution[i]) return;
+  }
+
+  // ПОБЕДА!
+  state.gameOver = true;
+  stopTimer();
+
+  // Обновляем статистику
+  updateStatsWon(state.timer, state.difficulty, state.noErrors);
+
+  // Проверяем daily
+  if (state.isDaily) {
+    completeDailyChallenge(state.timer);
+  }
+
+  // Добавляем в лидерборд
+  addToLeaderboard(state.timer, state.difficulty);
+
+  // Разблокируем достижения
+  checkAchievements(state.timer, state.errors, state.difficulty);
+
+  // Конфетти
+  setTimeout(launchConfetti, 200);
+
+  // Показываем победный экран
+  setTimeout(() => {
+    document.getElementById('win-time').textContent = formatTime(state.timer);
+    document.getElementById('win-difficulty').textContent = `Уровень: ${DIFFICULTY_CONFIG[state.difficulty].label}`;
+    openModal('win-modal');
+  }, 400);
+}
+
+// ============================================================
+// КОНФЕТТИ
+// ============================================================
+
+function launchConfetti() {
+  const colors = ['#6c63ff', '#2ed573', '#ffa502', '#ff4757', '#1e90ff', '#ff6b9d'];
+  for (let i = 0; i < 80; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + 'vw';
+    piece.style.top = '-10px';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.width = (Math.random() * 8 + 4) + 'px';
+    piece.style.height = (Math.random() * 8 + 4) + 'px';
+    piece.style.animationDuration = (Math.random() * 3 + 2) + 's';
+    piece.style.animationDelay = Math.random() * 1.5 + 's';
+    document.body.appendChild(piece);
+    setTimeout(() => piece.remove(), 6000);
+  }
+}
+
+// ============================================================
+// AI COACH
+// ============================================================
+
+function toggleAIPanel() {
+  state.aiPanelOpen = !state.aiPanelOpen;
+  const panel = document.getElementById('ai-panel');
+  panel.classList.toggle('open', state.aiPanelOpen);
+  const btn = document.getElementById('ai-toggle-btn');
+  btn.style.borderColor = state.aiPanelOpen ? 'var(--accent)' : '';
+  btn.style.background = state.aiPanelOpen
+    ? 'rgba(108,99,255,0.2)'
+    : 'linear-gradient(135deg,rgba(108,99,255,0.15),rgba(108,99,255,0.05))';
+}
+
+function askAI() {
+  const idx = state.selected;
+  if (idx === -1) {
+    document.getElementById('ai-response').innerHTML = `
+      <div class="ai-message" style="color:var(--warning);">
+        👆 Сначала выберите ячейку на игровом поле, затем нажмите «Анализировать».
+      </div>`;
+    return;
+  }
+
+  const row = Math.floor(idx / 9);
+  const col = idx % 9;
+  const currentVal = state.board[idx];
+  const isGiven = state.given[idx];
+
+  if (isGiven) {
+    document.getElementById('ai-response').innerHTML = `
+      <div class="ai-message">
+        <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:6px;">🤖 AI Coach — строка ${row+1}, столбец ${col+1}</div>
+        Эта ячейка является <b>заданной</b> — она уже заполнена условием задачи и изменить её нельзя. Обратите внимание на соседние пустые ячейки.
+      </div>`;
+    return;
+  }
+
+  // Собираем числа в строке, столбце, блоке
+  const rowNums = [], colNums = [], boxNums = [];
+  const boxRow = Math.floor(row / 3) * 3;
+  const boxCol = Math.floor(col / 3) * 3;
+
+  for (let i = 0; i < 9; i++) {
+    const rv = state.board[row * 9 + i];
+    const cv = state.board[i * 9 + col];
+    if (rv !== 0 && i !== col) rowNums.push(rv);
+    if (cv !== 0 && i !== row) colNums.push(cv);
+  }
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const ri = boxRow + r, ci = boxCol + c;
+      if (ri === row && ci === col) continue;
+      const v = state.board[ri * 9 + ci];
+      if (v !== 0) boxNums.push(v);
+    }
+  }
+
+  // Все числа исключённые из рассмотрения
+  const excluded = new Set([...rowNums, ...colNums, ...boxNums]);
+  const possible = [];
+  for (let n = 1; n <= 9; n++) {
+    if (!excluded.has(n)) possible.push(n);
+  }
+
+  // Определяем стратегию
+  let strategy = '', advice = '', icon = '🧩';
+
+  if (possible.length === 0) {
+    // Ошибка в доске
+    strategy = 'Конфликт в доске!';
+    advice = `Для ячейки (${row+1}, ${col+1}) нет ни одного допустимого числа. Это значит, что где-то раньше была допущена ошибка. Используйте кнопку <b>«Отмена»</b> чтобы откатить последние ходы.`;
+    icon = '❌';
+  } else if (possible.length === 1) {
+    // Naked Single — единственная возможность
+    strategy = 'Naked Single (единственная возможность)';
+    const usedByRow = rowNums.length > 0 ? `Строка уже содержит: ${rowNums.sort((a,b)=>a-b).join(', ')}.` : '';
+    const usedByCol = colNums.length > 0 ? `Столбец уже содержит: ${colNums.sort((a,b)=>a-b).join(', ')}.` : '';
+    const usedByBox = boxNums.length > 0 ? `Блок 3×3 уже содержит: ${boxNums.sort((a,b)=>a-b).join(', ')}.` : '';
+    advice = `${usedByRow} ${usedByCol} ${usedByBox} После исключения всех занятых чисел в этой ячейке остаётся только одна возможность. Это классический приём <i>Naked Single</i> — самый простой в судоку.`;
+    icon = '🎯';
+  } else if (possible.length === 2) {
+    // Naked Pair candidate
+    strategy = 'Naked Pair / Hidden Single';
+    advice = `Для этой ячейки возможны ${possible.length} числа: <b>${possible.join(' или ')}</b>. 
+    Попробуйте технику <i>Hidden Single</i>: проверьте, не является ли одно из этих чисел единственным возможным местом в строке, столбце или блоке. 
+    Также изучите соседние пустые ячейки — возможно, там тоже только эти два числа (<i>Naked Pair</i>), что поможет исключить их из других ячеек.`;
+    icon = '🔍';
+  } else if (possible.length <= 4) {
+    // Pointing pairs / Box-Line Reduction
+    strategy = 'Pointing Pairs / Box-Line Reduction';
+    advice = `Возможные числа для этой ячейки: <b>${possible.join(', ')}</b>. 
+    Примените технику <i>Pointing Pairs</i>: если какое-то из этих чисел встречается только в одной строке или столбце внутри блока 3×3 — вы можете убрать его из остальных ячеек этой строки/столбца за пределами блока. 
+    Также проверьте технику <i>Box-Line Reduction</i> в обратном направлении.`;
+    icon = '💡';
+  } else {
+    // Много вариантов — общий совет
+    strategy = 'Анализ кандидатов';
+    advice = `Пока слишком много вариантов (${possible.join(', ')}). Рекомендую сначала заполнить более очевидные ячейки с меньшим числом кандидатов. 
+    Используйте режим <b>«Заметки» ✏️</b> чтобы записывать возможные числа в пустые ячейки — это поможет увидеть закономерности. 
+    Начните с ячеек, где возможно только 1–2 числа.`;
+    icon = '📝';
+  }
+
+  // Проверяем текущее значение — правильное ли оно?
+  let currentStatus = '';
+  if (currentVal !== 0) {
+    if (currentVal === state.solution[idx]) {
+      currentStatus = `<div style="color:var(--success);font-size:12px;margin-bottom:8px;">✅ Число ${currentVal} стоит правильно!</div>`;
+    } else {
+      currentStatus = `<div style="color:var(--error);font-size:12px;margin-bottom:8px;">❌ Число ${currentVal} стоит неверно. Уберите его и подумайте снова.</div>`;
+    }
+  }
+
+  // Показываем с небольшой задержкой для эффекта "анализа"
+  document.getElementById('ai-response').innerHTML = `
+    <div class="ai-message" style="display:flex;align-items:center;gap:12px;">
+      <div class="ai-loading-dots"><span></span><span></span><span></span></div>
+      <span style="color:var(--text-secondary);">AI анализирует позицию...</span>
+    </div>`;
+
+  setTimeout(() => {
+    document.getElementById('ai-response').innerHTML = `
+      <div class="ai-message">
+        <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:6px;">
+          ${icon} AI Coach — строка ${row+1}, столбец ${col+1}
+        </div>
+        ${currentStatus}
+        <div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;">
+          Стратегия: <span style="color:var(--accent-light);">${strategy}</span>
+        </div>
+        <div style="font-size:13px;line-height:1.6;color:var(--text-primary);">${advice}</div>
+        ${possible.length > 0 && possible.length <= 5 ? `
+        <div style="margin-top:10px;padding:8px;background:var(--bg-hover);border-radius:8px;font-size:12px;">
+          🔢 Допустимые числа: <b style="color:var(--accent-light);">${possible.join(', ')}</b>
+        </div>` : ''}
+      </div>`;
+  }, 600);
+}
+
+// ============================================================
+// СТАТИСТИКА
+// ============================================================
+
+function getStats() {
+  return JSON.parse(localStorage.getItem('sudoku_stats') || '{}');
+}
+
+function saveStats(stats) {
+  localStorage.setItem('sudoku_stats', JSON.stringify(stats));
+}
+
+function updateStatsPlayed(isDaily = false) {
+  const stats = getStats();
+  if (!isDaily) {
+    stats.played = (stats.played || 0) + 1;
+    saveStats(stats);
+    renderStats();
+  }
+}
+
+function updateStatsWon(time, difficulty, noErrors) {
+  const stats = getStats();
+  stats.played = (stats.played || 0);
+  stats.won = (stats.won || 0) + 1;
+
+  // Лучшее время по уровням
+  if (!stats.bestTimes) stats.bestTimes = {};
+  if (!stats.bestTimes[difficulty] || time < stats.bestTimes[difficulty]) {
+    stats.bestTimes[difficulty] = time;
+  }
+
+  saveStats(stats);
+  renderStats();
+}
+
+function renderStats() {
+  const stats = getStats();
+  const played = stats.played || 0;
+  const won = stats.won || 0;
+  const winRate = played > 0 ? Math.round(won / played * 100) : 0;
+  const streak = getStreak();
+
+  document.getElementById('stat-played').textContent = played;
+  document.getElementById('stat-won').textContent = won;
+  document.getElementById('stat-streak').textContent = streak;
+  document.getElementById('stat-winrate').textContent = `${winRate}%`;
+
+  // Лучшие времена
+  const bestEl = document.getElementById('best-times-list');
+  if (!bestEl) return;
+  bestEl.innerHTML = '';
+
+  const diffs = ['easy', 'medium', 'hard', 'expert'];
+  const labels = { easy: 'Лёгкий', medium: 'Средний', hard: 'Сложный', expert: 'Эксперт' };
+
+  diffs.forEach(d => {
+    const t = stats.bestTimes?.[d];
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);';
+    row.innerHTML = `
+      <span style="font-size:13px;color:var(--text-secondary);">${labels[d]}</span>
+      <span style="font-size:13px;font-family:'Space Mono',monospace;font-weight:700;color:${t ? 'var(--accent)' : 'var(--text-muted)'};">
+        ${t ? formatTime(t) : '--:--'}
+      </span>`;
+    bestEl.appendChild(row);
+  });
+}
+
+// ============================================================
+// ДОСТИЖЕНИЯ
+// ============================================================
+
+const ACHIEVEMENTS_DEF = [
+  { id: 'first_win',   icon: '🥇', title: 'Первая победа',        desc: 'Решите первое судоку' },
+  { id: 'no_errors',   icon: '🎯', title: 'Снайпер',              desc: 'Решите без единой ошибки' },
+  { id: 'speed_5',     icon: '⚡', title: 'Скоростной решатель',  desc: 'Решите за менее 5 минут' },
+  { id: 'speed_3',     icon: '🚀', title: 'Ракета',               desc: 'Решите за менее 3 минут' },
+  { id: 'expert_win',  icon: '🧠', title: 'Гений',                desc: 'Решите уровень Эксперт' },
+  { id: 'daily_7',     icon: '📅', title: 'Неделя подряд',        desc: '7 дней Daily Challenge' },
+  { id: 'no_hints',    icon: '🦅', title: 'Орёл',                 desc: 'Победа без подсказок' },
+  { id: 'streak_3',    icon: '🔥', title: 'Огонь',               desc: 'Серия 3 дня подряд' },
+];
+
+function getAchievements() {
+  return JSON.parse(localStorage.getItem('sudoku_achievements') || '[]');
+}
+
+function unlockAchievement(id) {
+  const unlocked = getAchievements();
+  if (unlocked.includes(id)) return;
+  unlocked.push(id);
+  localStorage.setItem('sudoku_achievements', JSON.stringify(unlocked));
+
+  const def = ACHIEVEMENTS_DEF.find(a => a.id === id);
+  if (def) showAchievementToast(def);
+  buildAchievementsList();
+}
+
+function showAchievementToast(achievement) {
+  const toast = document.getElementById('achievement-toast');
+  document.getElementById('toast-icon').textContent = achievement.icon;
+  document.getElementById('toast-title').textContent = achievement.title;
+  toast.style.transform = 'translateX(0)';
+  setTimeout(() => toast.style.transform = 'translateX(200px)', 3500);
+}
+
+function checkAchievements(time, errors, difficulty) {
+  const stats = getStats();
+  const won = stats.won || 0;
+
+  if (won >= 1) unlockAchievement('first_win');
+  if (errors === 0) unlockAchievement('no_errors');
+  if (time < 300) unlockAchievement('speed_5');
+  if (time < 180) unlockAchievement('speed_3');
+  if (difficulty === 'expert') unlockAchievement('expert_win');
+  if (state.hintsLeft === 3) unlockAchievement('no_hints'); // не использовали подсказки
+
+  const streak = getStreak();
+  if (streak >= 7) unlockAchievement('daily_7');
+  if (streak >= 3) unlockAchievement('streak_3');
+}
+
+function buildAchievementsList() {
+  const el = document.getElementById('achievements-list');
+  if (!el) return;
+  const unlocked = getAchievements();
+  el.innerHTML = '';
+
+  ACHIEVEMENTS_DEF.forEach(a => {
+    const isUnlocked = unlocked.includes(a.id);
+    const div = document.createElement('div');
+    div.className = `achievement ${isUnlocked ? 'unlocked' : ''}`;
+    div.innerHTML = `
+      <div class="achievement-icon" style="${isUnlocked ? '' : 'filter:grayscale(1);opacity:0.4;'}">${a.icon}</div>
+      <div>
+        <div style="font-size:13px;font-weight:700;${isUnlocked ? 'color:var(--success);' : 'color:var(--text-muted);'}">${a.title}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${a.desc}</div>
+      </div>
+      ${isUnlocked ? '<div style="margin-left:auto;color:var(--success);font-size:16px;">✓</div>' : ''}
+    `;
+    el.appendChild(div);
+  });
+}
+
+// ============================================================
+// ЛИДЕРБОРД
+// ============================================================
+
+function addToLeaderboard(time, difficulty) {
+  const name = localStorage.getItem('sudoku_player_name') || 'Игрок';
+  const board = JSON.parse(localStorage.getItem('sudoku_leaderboard') || '[]');
+
+  board.push({
+    name,
+    time,
+    difficulty,
+    date: new Date().toLocaleDateString('ru'),
+  });
+
+  // Сортируем по времени
+  board.sort((a, b) => a.time - b.time);
+
+  // Топ-10
+  localStorage.setItem('sudoku_leaderboard', JSON.stringify(board.slice(0, 10)));
+  renderLeaderboard();
+}
+
+function renderLeaderboard() {
+  const el = document.getElementById('global-leaderboard');
+  if (!el) return;
+  const board = JSON.parse(localStorage.getItem('sudoku_leaderboard') || '[]');
+
+  if (board.length === 0) {
+    el.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:16px;">Ещё нет результатов.<br>Сыграйте первую игру!</div>`;
+    return;
+  }
+
+  const medals = ['🥇', '🥈', '🥉'];
+  const diffColors = { easy: '#2ed573', medium: '#ffa502', hard: '#ff6348', expert: '#6c63ff' };
+
+  el.innerHTML = board.map((entry, i) => `
+    <div class="leaderboard-row">
+      <div class="flex items-center gap-3">
+        <div class="rank-badge" style="background:${i < 3 ? 'var(--accent)' : 'var(--bg-secondary)'};color:${i < 3 ? 'white' : 'var(--text-muted)'};">
+          ${medals[i] || i + 1}
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:700;">${entry.name}</div>
+          <div style="font-size:10px;color:${diffColors[entry.difficulty] || 'var(--text-muted)'};">${DIFFICULTY_CONFIG[entry.difficulty]?.label || entry.difficulty}</div>
+        </div>
+      </div>
+      <div style="font-size:13px;font-family:'Space Mono',monospace;font-weight:700;color:var(--accent);">${formatTime(entry.time)}</div>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// DAILY CHALLENGE
+// ============================================================
+
+function getDailyDateStr() {
+  const today = new Date();
+  return `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}`;
+}
+
+function completeDailyChallenge(time) {
+  const dateStr = getDailyDateStr();
+  localStorage.setItem('sudoku_daily_played', dateStr);
+
+  // Обновляем серию
+  updateDailyStreak();
+
+  // Добавляем в рекорды дня
+  const name = localStorage.getItem('sudoku_player_name') || 'Игрок';
+  const daily = JSON.parse(localStorage.getItem('sudoku_daily_records') || '{}');
+  if (!daily[dateStr]) daily[dateStr] = [];
+  daily[dateStr].push({ name, time });
+  daily[dateStr].sort((a, b) => a.time - b.time);
+  daily[dateStr] = daily[dateStr].slice(0, 10);
+  localStorage.setItem('sudoku_daily_records', JSON.stringify(daily));
+
+  document.getElementById('daily-status').textContent = '✅ Завершено!';
+  renderDailyLeaderboard();
+}
+
+function updateDailyStreak() {
+  const today = new Date();
+  const dateStr = getDailyDateStr();
+
+  const lastPlayed = localStorage.getItem('sudoku_streak_date') || '';
+  const streak = parseInt(localStorage.getItem('sudoku_streak') || '0');
+
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yStr = `${yesterday.getFullYear()}${String(yesterday.getMonth()+1).padStart(2,'0')}${String(yesterday.getDate()).padStart(2,'0')}`;
+
+  let newStreak = 1;
+  if (lastPlayed === yStr) {
+    newStreak = streak + 1;
+  } else if (lastPlayed === dateStr) {
+    newStreak = streak;
+  }
+
+  localStorage.setItem('sudoku_streak', newStreak);
+  localStorage.setItem('sudoku_streak_date', dateStr);
+  updateStreak();
+}
+
+function getStreak() {
+  return parseInt(localStorage.getItem('sudoku_streak') || '0');
+}
+
+function updateStreak() {
+  const s = getStreak();
+  document.getElementById('header-streak').textContent = s;
+  document.getElementById('streak-display').textContent = s;
+  const el = document.getElementById('stat-streak');
+  if (el) el.textContent = s;
+}
+
+function renderDailyLeaderboard() {
+  const el = document.getElementById('daily-leaderboard');
+  if (!el) return;
+  const dateStr = getDailyDateStr();
+  const daily = JSON.parse(localStorage.getItem('sudoku_daily_records') || '{}');
+  const records = daily[dateStr] || [];
+
+  if (records.length === 0) {
+    el.innerHTML = `<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:8px;">Первым реши задание дня!</div>`;
+    return;
+  }
+
+  el.innerHTML = records.map((r, i) => `
+    <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:12px;color:var(--text-secondary);">${['🥇','🥈','🥉'][i] || (i+1)} ${r.name}</span>
+      <span style="font-size:12px;font-family:'Space Mono',monospace;color:var(--accent);">${formatTime(r.time)}</span>
+    </div>
+  `).join('');
+}
+
+function updateDailyCountdown() {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+
+  const diff = tomorrow - now;
+  const h = Math.floor(diff / 3600000).toString().padStart(2, '0');
+  const m = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+  const s = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+
+  const el = document.getElementById('daily-countdown');
+  if (el) el.textContent = `${h}:${m}:${s}`;
+
+  // Дата
+  const dateEl = document.getElementById('daily-date');
+  if (dateEl) {
+    dateEl.textContent = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  }
+
+  // Статус
+  const dateStr = getDailyDateStr();
+  const played = localStorage.getItem('sudoku_daily_played') === dateStr;
+  const statusEl = document.getElementById('daily-status');
+  if (statusEl && !played) statusEl.textContent = 'Ещё не начато';
+}
+
+// ============================================================
+// МОДАЛЬНЫЕ ОКНА
+// ============================================================
+
+function openModal(id) {
+  document.getElementById(id).classList.add('visible');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('visible');
+}
+
+function closeModalOnOverlay(event, id) {
+  if (event.target === event.currentTarget) closeModal(id);
+}
+
+// ============================================================
+// НАСТРОЙКИ
+// ============================================================
+
+function loadSettings() {
+  const apiKey = localStorage.getItem('sudoku_api_key');
+  const name = localStorage.getItem('sudoku_player_name');
+  const theme = localStorage.getItem('sudoku_theme') || 'dark';
+
+  if (apiKey) {
+    document.getElementById('api-key-sidebar').value = apiKey;
+    document.getElementById('api-key-settings').value = apiKey;
+  }
+  if (name) {
+    document.getElementById('player-name-input').value = name;
+  }
+
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
+function saveSettings() {
+  const apiKey = document.getElementById('api-key-settings').value.trim();
+  const name = document.getElementById('player-name-input').value.trim();
+
+  if (apiKey) {
+    localStorage.setItem('sudoku_api_key', apiKey);
+    document.getElementById('api-key-sidebar').value = apiKey;
+  }
+  if (name) {
+    localStorage.setItem('sudoku_player_name', name);
+  }
+
+  closeModal('settings-modal');
+  showToastMessage('✅ Настройки сохранены');
+}
+
+function clearAllData() {
+  if (!confirm('Удалить все данные? Это действие нельзя отменить!')) return;
+  const keys = ['sudoku_stats', 'sudoku_achievements', 'sudoku_leaderboard', 'sudoku_daily_records', 'sudoku_streak', 'sudoku_streak_date', 'sudoku_daily_played'];
+  keys.forEach(k => localStorage.removeItem(k));
+  renderStats();
+  renderLeaderboard();
+  buildAchievementsList();
+  closeModal('settings-modal');
+  showToastMessage('🗑 Данные удалены');
+}
+
+function showToastMessage(text) {
+  const toast = document.getElementById('achievement-toast');
+  document.getElementById('toast-icon').textContent = '✅';
+  document.getElementById('toast-title').textContent = text;
+  toast.style.transform = 'translateX(0)';
+  setTimeout(() => toast.style.transform = 'translateX(200px)', 2500);
+}
+
+// ============================================================
+// ТЕМА
+// ============================================================
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('sudoku_theme', next);
+}
+
+// ============================================================
+// НАВИГАЦИЯ ВКЛАДОК
+// ============================================================
+
+function switchSidebarTab(tabName, btn) {
+  // Убираем активный класс со всех вкладок
+  document.querySelectorAll('#sidebar .sidebar-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#sidebar .tab-content').forEach(t => t.classList.remove('active'));
+
+  btn.classList.add('active');
+  const el = document.getElementById(`tab-${tabName}`);
+  if (el) el.classList.add('active');
+}
+
+function switchMobileTab(tabName, btn) {
+  document.querySelectorAll('#mobile-tabs .sidebar-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+
+  const mobileContent = document.getElementById('mobile-content');
+  const sourceEl = document.getElementById(`tab-${tabName}`);
+  if (!sourceEl) return;
+
+  // Показываем/скрываем мобильный контент
+  if (mobileContent.dataset.currentTab === tabName) {
+    mobileContent.classList.add('hidden');
+    mobileContent.dataset.currentTab = '';
+    return;
+  }
+
+  mobileContent.innerHTML = sourceEl.outerHTML;
+  mobileContent.classList.remove('hidden');
+  mobileContent.dataset.currentTab = tabName;
+}
+
+// ============================================================
+// УРОВЕНЬ СЛОЖНОСТИ
+// ============================================================
+
+function setDifficulty(diff, btn) {
+  state.difficulty = diff;
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('current-difficulty-label').textContent = DIFFICULTY_CONFIG[diff].label;
+}
+
+// ============================================================
+// ИНИЦИАЛИЗАЦИЯ ДАННЫХ ДЛЯ ПЕРВОГО ЗАПУСКА
+// ============================================================
+// Устанавливаем дату для daily challenge
+const todayEl = document.getElementById('daily-date');
+if (todayEl) {
+  todayEl.textContent = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+}
+</script>
+</body>
+</html>
